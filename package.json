@@ -1,0 +1,15 @@
+{
+  "name": "stichup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root config to proxy npm scripts to Frontend",
+  "scripts": {
+    "install:frontend": "npm --prefix Frontend install",
+    "dev": "npm --prefix Frontend run dev",
+    "build": "npm --prefix Frontend run build",
+    "preview": "npm --prefix Frontend run preview",
+    "lint": "npm --prefix Frontend run lint || echo 'lint script not defined in Frontend'"
+  }
+}
+
+
