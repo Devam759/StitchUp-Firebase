@@ -34,9 +34,23 @@ const FindTailor = () => {
         const qs = await getDocs(q)
         const docs = qs.docs.map(d => {
           const data = d.data()
+
+          // Filter out obvious demo, sample or incomplete profiles
+          const name = data.fullName || data.name || ''
+          const lowerName = name.toLowerCase()
+
+          if (!data.phone) return null
+          if (!name || name === 'Tailor') return null
+          if (lowerName.includes('sample') ||
+            lowerName.includes('test') ||
+            lowerName.includes('stitchup tailors') ||
+            lowerName.includes('needle & thread')) {
+            return null
+          }
+
           return {
             id: d.id,
-            name: data.fullName || data.name || 'Tailor',
+            name: name,
             shopPhotoUrl: data.shopPhotoUrl || '',
             isAvailable: typeof data.isAvailable === 'boolean' ? data.isAvailable : true,
             currentOrders: data.currentOrders || 0,
@@ -47,7 +61,7 @@ const FindTailor = () => {
             reviews: data.reviews || 0,
             priceFrom: data.priceFrom || 150
           }
-        })
+        }).filter(Boolean)
         setAllTailors(docs)
       } catch (e) {
         console.error("Failed to load tailors via Firestore", e)

@@ -189,7 +189,7 @@ const Orders = () => {
               <div className="font-semibold">{o.id}</div>
               <div className="text-sm text-neutral-600">{o.slot}</div>
             </div>
-            <div className="text-sm text-neutral-600 mt-1">{o.user} • {o.service} • {o.cloth}</div>
+            <div className="text-sm text-neutral-600 mt-1">{o.customerName || 'No Name'} • {o.service} {o.cloth ? `• ${o.cloth}` : ''}</div>
             {o.status === 'Ready' && !o.needsRevision && (
               <div className="mt-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium inline-block">
                 Ready

@@ -247,13 +247,17 @@ const TailorEnquiries = () => {
     const orderId = `order_${Date.now()}`
 
     const orderData = {
+      id: orderId,
       orderId,
       customerId,
       customerName,
       tailorId,
       tailorName: currentTailor.name || currentTailor.fullName || 'Tailor',
+      service: customPricing.service || 'Tailoring Service',
+      price: Number(customPricing.price) || 0,
       status: 'working',
       startTime: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       lastUpdate: new Date().toISOString(),
       workType: localStorage.getItem('workType') || 'light'
     }

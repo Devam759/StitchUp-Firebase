@@ -36,7 +36,7 @@ const Earnings = () => {
 
         for (const o of orders) {
           if (o.status !== 'Request' && o.status !== 'Rejected') {
-            const price = Number(o.priceFrom) || 150
+            const price = Number(o.price) || 0
             gross += price
 
             const dateObj = new Date(o.createdAt || Date.now())

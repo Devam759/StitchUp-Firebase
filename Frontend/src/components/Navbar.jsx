@@ -3,20 +3,29 @@ import { motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiUser, FiBell, FiPackage, FiMessageCircle, FiShoppingCart } from 'react-icons/fi'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
-import { signOut } from 'firebase/auth'
 import { auth, db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 
 const Navbar = ({ hideUntilScroll = false }) => {
+  const { user, signOut: authSignOut, updateProfile } = useAuth()
   const [isVisible, setIsVisible] = useState(!hideUntilScroll)
   const [scrolled, setScrolled] = useState(false)
-  const [user, setUser] = useState(null)
   const [showNotifications, setShowNotifications] = useState(false)
   const [pendingOrders, setPendingOrders] = useState([])
   const [newEnquiries, setNewEnquiries] = useState([])
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const notificationsRef = useRef(null)
   const userMenuRef = useRef(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const navigate = useNavigate()
+
+  const toggleAvailability = async () => {
+    if (!user || updatingStatus) return
+    setUpdatingStatus(true)
+    const newStatus = !(user.isAvailable ?? true)
+    await updateProfile({ isAvailable: newStatus })
+    setUpdatingStatus(false)
+  }
 
   // Scroll visibility
   useEffect(() => {
@@ -39,27 +48,10 @@ const Navbar = ({ hideUntilScroll = false }) => {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Check user
-  useEffect(() => {
-    const checkUser = () => {
-      try {
-        const currentUser = localStorage.getItem('currentUser')
-        setUser(currentUser ? JSON.parse(currentUser) : null)
-      } catch { setUser(null) }
-    }
-    checkUser()
-    window.addEventListener('storage', checkUser)
-    window.addEventListener('authChange', checkUser)
-    return () => {
-      window.removeEventListener('storage', checkUser)
-      window.removeEventListener('authChange', checkUser)
-    }
-  }, [])
-
   // Tailor notifications
   useEffect(() => {
     if (!user?.role || user.role !== 'tailor') return
-    const tailorId = user.phone || user.id
+    const tailorId = user.id || user.uid
     if (!tailorId) return
 
     const qOrders = query(collection(db, 'orders'), where('tailorId', '==', tailorId))
@@ -82,10 +74,11 @@ const Navbar = ({ hideUntilScroll = false }) => {
   }, [user])
 
   const handleLogout = async () => {
-    try { await signOut(auth) } catch { }
-    localStorage.removeItem('currentUser')
-    setUser(null)
-    window.dispatchEvent(new Event('authChange'))
+    try {
+      await authSignOut()
+      // Clear cookie
+      document.cookie = "st_user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
+    } catch { }
     navigate('/')
   }
 
@@ -112,6 +105,26 @@ const Navbar = ({ hideUntilScroll = false }) => {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              {/* Tailor online toggle */}
+              {user.role === 'tailor' && (
+                <div className="flex items-center gap-2 mr-3 px-3 py-1.5 rounded-xl bg-neutral-100/50">
+                  <span className={`text-[10px] font-black uppercase tracking-widest hidden sm:block ${user.isAvailable ?? true ? 'text-green-600' : 'text-neutral-400'}`}>
+                    {user.isAvailable ?? true ? 'Online' : 'Offline'}
+                  </span>
+                  <button
+                    onClick={toggleAvailability}
+                    disabled={updatingStatus}
+                    className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${user.isAvailable ?? true ? 'bg-green-500' : 'bg-neutral-300'}`}
+                  >
+                    <motion.div
+                      animate={{ x: (user.isAvailable ?? true) ? 22 : 2 }}
+                      initial={false}
+                      className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-md"
+                    />
+                  </button>
+                </div>
+              )}
+
               {/* Customer cart */}
               {user.role === 'customer' && (
                 <Link to="/cart" className={`p-2 rounded-lg hover:bg-neutral-100 transition-colors ${textColor}`} title="Cart">
@@ -127,34 +140,34 @@ const Navbar = ({ hideUntilScroll = false }) => {
                     className={`p-2 rounded-lg hover:bg-neutral-100 transition-colors relative ${textColor}`}
                   >
                     <FiBell className="w-5 h-5" />
-                    {notifCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+                    {notifCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]" />}
                   </button>
 
                   {showNotifications && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-neutral-200 z-50 max-h-96 overflow-hidden flex flex-col">
-                      <div className="p-4 border-b border-neutral-100">
-                        <div className="font-semibold text-neutral-900">Notifications</div>
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-neutral-100 z-50 max-h-96 overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-neutral-50 bg-neutral-50/50">
+                        <div className="font-bold text-neutral-900 uppercase tracking-tight">Notifications</div>
                       </div>
                       <div className="overflow-y-auto flex-1 p-2">
                         {notifCount === 0 ? (
-                          <div className="p-4 text-center text-neutral-400 text-sm">No new notifications</div>
+                          <div className="p-8 text-center text-neutral-400 text-sm italic">No new notifications</div>
                         ) : (
                           <>
                             {pendingOrders.slice(0, 5).map(order => (
-                              <Link key={order.id} to="/tailor/orders" onClick={() => setShowNotifications(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-50 transition-colors">
-                                <div className="p-1.5 bg-blue-50 rounded-lg"><FiPackage className="w-4 h-4 text-blue-600" /></div>
+                              <Link key={order.id} to="/tailor/orders" onClick={() => setShowNotifications(false)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-neutral-50 transition-colors">
+                                <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><FiPackage className="w-4 h-4" /></div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-neutral-900 truncate">{order.user} • {order.service}</div>
-                                  <div className="text-xs text-neutral-400">{order.slot}</div>
+                                  <div className="text-sm font-bold text-neutral-900 truncate">{order.customerName || 'Customer'} • {order.service}</div>
+                                  <div className="text-[10px] text-neutral-400 font-bold uppercase">{order.id}</div>
                                 </div>
                               </Link>
                             ))}
                             {newEnquiries.slice(0, 5).map((enq, i) => (
-                              <Link key={i} to="/tailor/enquiries" onClick={() => setShowNotifications(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-50 transition-colors">
-                                <div className="p-1.5 bg-green-50 rounded-lg"><FiMessageCircle className="w-4 h-4 text-green-600" /></div>
+                              <Link key={i} to="/tailor/enquiries" onClick={() => setShowNotifications(false)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-neutral-50 transition-colors">
+                                <div className="p-2 bg-green-50 rounded-lg text-green-600"><FiMessageCircle className="w-4 h-4" /></div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-neutral-900 truncate">{enq.customerName || 'Customer'}</div>
-                                  <div className="text-xs text-neutral-400">New message</div>
+                                  <div className="text-sm font-bold text-neutral-900 truncate">{enq.customerName || 'Customer'}</div>
+                                  <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest text-green-600">New Message</div>
                                 </div>
                               </Link>
                             ))}
@@ -172,37 +185,39 @@ const Navbar = ({ hideUntilScroll = false }) => {
                   <FiUser className="w-5 h-5" />
                 </button>
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-neutral-200 z-50 py-1">
-                    <div className="px-4 py-3 border-b border-neutral-100">
-                      <p className="text-sm font-medium text-neutral-900 truncate">{user.name || user.fullName || 'User'}</p>
-                      <p className="text-xs text-neutral-400 mt-0.5">{user.role}</p>
+                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-2xl border border-neutral-100 z-50 py-2">
+                    <div className="px-4 py-4 border-b border-neutral-50 bg-neutral-50/30">
+                      <p className="text-sm font-bold text-neutral-900 truncate">{user.name || user.fullName || 'User'}</p>
+                      <p className="text-[10px] font-black text-[#305cde] uppercase tracking-widest mt-1 opacity-70">{user.role}</p>
                     </div>
-                    {user.role === 'customer' ? (
-                      <>
-                        <Link to="/customer/account" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">My Account</Link>
-                        <Link to="/customer/orders" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Orders</Link>
-                        <Link to="/enquiries" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Enquiries</Link>
-                      </>
-                    ) : (
-                      <>
-                        <Link to="/tailor/profile" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Profile</Link>
-                        <Link to="/tailor/orders" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Orders</Link>
-                        <Link to="/tailor/enquiries" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Enquiries</Link>
-                        <Link to="/tailor/earnings" onClick={() => setShowUserMenu(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">Earnings</Link>
-                      </>
-                    )}
-                    <div className="border-t border-neutral-100 mt-1" />
-                    <button onClick={() => { setShowUserMenu(false); handleLogout() }} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
-                      Log Out
-                    </button>
+                    <div className="p-2">
+                      {user.role === 'customer' ? (
+                        <>
+                          <Link to="/customer/account" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">My Account</Link>
+                          <Link to="/customer/orders" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Orders</Link>
+                          <Link to="/enquiries" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Enquiries</Link>
+                        </>
+                      ) : (
+                        <>
+                          <Link to="/tailor/dashboard" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Dashboard</Link>
+                          <Link to="/tailor/profile" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Profile / Rates</Link>
+                          <Link to="/tailor/orders" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Manage Orders</Link>
+                          <Link to="/tailor/enquiries" onClick={() => setShowUserMenu(false)} className="flex items-center px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50 rounded-xl transition-colors">Enquiries Chat</Link>
+                        </>
+                      )}
+                      <div className="h-px bg-neutral-100 my-2 mx-2" />
+                      <button onClick={() => { setShowUserMenu(false); handleLogout() }} className="w-full flex items-center px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+                        Log Out
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-2">
-              <Link to="/login" className={`px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-100 transition-colors ${textColor}`}>Log In</Link>
-              <Link to="/signup" className="px-4 py-2 text-sm font-semibold rounded-lg bg-[color:var(--color-primary)] text-white hover:opacity-90 transition-opacity">Sign Up</Link>
+            <div className="flex items-center gap-3">
+              <Link to="/login" className={`px-5 py-2 text-sm font-bold rounded-xl hover:bg-neutral-100 transition-colors ${textColor}`}>Log In</Link>
+              <Link to="/signup" className="px-6 py-2.5 text-sm font-black uppercase tracking-widest rounded-xl bg-[#305cde] text-white hover:shadow-lg hover:shadow-blue-500/30 transition-all">Join Now</Link>
             </div>
           )}
         </div>

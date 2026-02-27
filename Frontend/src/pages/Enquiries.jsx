@@ -11,6 +11,8 @@ const Enquiries = () => {
   const tailorName = params.get('tailorName') || 'Tailor'
   const isOnline = params.get('isOnline') === 'true'
   const [allEnquiries, setAllEnquiries] = useState([])
+  const [tailorPhone, setTailorPhone] = useState('')
+  const [smsTriggered, setSmsTriggered] = useState(false)
 
   const [messages, setMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
@@ -47,6 +49,7 @@ const Enquiries = () => {
       if (docSnap.exists()) {
         const data = docSnap.data()
         setTailorBusy(data.isCurrentlyChatting || false)
+        setTailorPhone(data.phone || '')
       }
     })
     return () => unsub()
@@ -93,6 +96,40 @@ const Enquiries = () => {
       lastUpdated: new Date().toISOString(),
       isOnline
     }, { merge: true })
+
+    // Trigger SMS if it's the first message from customer and we have a phone number
+    // Initial messages are usually 2 (System started conversation + Tailor welcome)
+    const isFirstUserMessage = msgsArray.filter(m => m.from === 'user').length === 1
+
+    if (isFirstUserMessage && tailorPhone && !smsTriggered) {
+      triggerSmsNotification(tailorPhone)
+      setSmsTriggered(true)
+    }
+  }
+
+  const triggerSmsNotification = async (phone) => {
+    const apiKey = import.meta.env.VITE_SMS_API_KEY
+    if (!apiKey) {
+      console.warn('SMS API Key not found in .env (VITE_SMS_API_KEY). Notification skipped.')
+      return
+    }
+
+    try {
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10)
+
+      // Using Fast2SMS Quick Route
+      const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${apiKey}&route=q&message=new%20enquiry&language=english&flash=0&numbers=${cleanPhone}`
+
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.return) {
+        console.log('SMS Sent Successfully to Tailor')
+      } else {
+        console.error('SMS Send Failed:', data.message)
+      }
+    } catch (err) {
+      console.error('SMS Error:', err)
+    }
   }
 
   const sendMessage = async () => {

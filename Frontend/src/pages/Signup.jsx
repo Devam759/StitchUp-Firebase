@@ -8,9 +8,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 
 const Signup = () => {
   const navigate = useNavigate()
+  const { refreshUser } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [form, setForm] = useState({
     fullName: '',
@@ -62,6 +64,9 @@ const Signup = () => {
         createdAt: new Date().toISOString()
       }
       await setDoc(userRef, profile)
+
+      // Refresh AuthContext to ensure it has the correct role before navigating
+      await refreshUser()
 
       const merged = { id: uid, uid, ...profile }
       localStorage.setItem('currentUser', JSON.stringify(merged))
