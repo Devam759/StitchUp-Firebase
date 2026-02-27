@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import PrimaryButton from '../components/ui/PrimaryButton'
@@ -26,6 +26,15 @@ const Signup = () => {
   const [otpLoading, setOtpLoading] = useState(false)
 
   const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
+
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear() } catch (e) { }
+        window.recaptchaVerifier = null
+      }
+    }
+  }, [])
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -76,15 +85,27 @@ const Signup = () => {
     setOtpLoading(true)
     try {
       const formattedPhone = '+91' + form.phone.replace(/\D/g, '')
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' })
+
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear() } catch (e) { }
+        window.recaptchaVerifier = null
       }
+
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible'
+      })
+
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier)
       setConfirmationResult(confirmation)
       setOtpOpen(true)
+      setErrors({})
     } catch (error) {
-      if (window.recaptchaVerifier) { try { window.recaptchaVerifier.clear() } catch { } window.recaptchaVerifier = null }
-      setErrors({ phone: `Failed to send OTP: ${error.message}` })
+      console.error('Phone auth error:', error)
+      let msg = error.message
+      if (error.code === 'auth/invalid-app-credential') {
+        msg = 'App verification failed. Please ensure your domain is added to "Authorized Domains" in Firebase Console.'
+      }
+      setErrors({ phone: `Failed to send OTP: ${msg}` })
     }
     setOtpLoading(false)
   }
@@ -107,7 +128,6 @@ const Signup = () => {
       <Navbar />
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
-          {/* Header */}
           <div className="text-center mb-8">
             <Link to="/">
               <img src="/logo2.png" alt="StitchUp" className="h-10 mx-auto mb-6" />
@@ -117,7 +137,6 @@ const Signup = () => {
           </div>
 
           <form onSubmit={onSubmit} className="bg-white rounded-xl border border-neutral-200 p-6 shadow-sm">
-            {/* Role toggle */}
             <div className="grid grid-cols-2 rounded-lg border border-neutral-200 overflow-hidden mb-6">
               <button
                 type="button"
@@ -136,7 +155,6 @@ const Signup = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1.5">Full Name</label>
                 <input name="fullName" value={form.fullName} onChange={onChange} placeholder="John Doe"
@@ -144,7 +162,6 @@ const Signup = () => {
                 {errors.fullName && <p className="mt-1 text-xs text-red-600">{errors.fullName}</p>}
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1.5">Email <span className="text-neutral-400">(optional)</span></label>
                 <input name="email" type="email" value={form.email} onChange={onChange} placeholder="you@example.com"
@@ -152,7 +169,6 @@ const Signup = () => {
                 {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1.5">Phone Number</label>
                 <div className="flex gap-2">
@@ -171,8 +187,8 @@ const Signup = () => {
                     onClick={handleGetOtp}
                     disabled={!form.phone || form.phone.replace(/\D/g, '').length < 10 || otpLoading}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${otpVerified
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : 'border border-[color:var(--color-primary)] text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/5 disabled:opacity-40 disabled:cursor-not-allowed'
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'border border-[color:var(--color-primary)] text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/5 disabled:opacity-40 disabled:cursor-not-allowed'
                       }`}
                   >
                     {otpVerified ? '✓ Verified' : otpLoading ? 'Sending...' : 'Get OTP'}

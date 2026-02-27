@@ -168,6 +168,11 @@ const Orders = () => {
           needsRevision: false,
           satisfactionStatus: null
         })
+
+        // Simulating the redirect for "Final Conversation" call
+        alert('Work ended! Redirecting to customer for final conversation...')
+        window.location.href = `tel:${selectedOrder.customerPhone || ''}`
+
       } catch (error) {
         console.error('Error saving order to Firestore:', error)
       }

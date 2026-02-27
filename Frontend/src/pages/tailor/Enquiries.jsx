@@ -4,7 +4,7 @@ import Card from '../../components/ui/Card'
 import PrimaryButton from '../../components/ui/PrimaryButton'
 import Input from '../../components/ui/Input'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { collection, query, where, getDocs, doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 
 const TailorEnquiries = () => {
@@ -70,6 +70,23 @@ const TailorEnquiries = () => {
     })
     return () => unsub()
   }, [customerId, currentTailor])
+
+  // Track busy status
+  useEffect(() => {
+    if (!currentTailor || !customerId) return
+    const tailorId = currentTailor.phone || currentTailor.id
+
+    const setBusy = async (val) => {
+      try {
+        await updateDoc(doc(db, 'users', tailorId), { isCurrentlyChatting: val })
+      } catch (err) {
+        console.error('Error updating busy status:', err)
+      }
+    }
+
+    setBusy(true)
+    return () => setBusy(false)
+  }, [currentTailor, customerId])
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -210,6 +227,57 @@ const TailorEnquiries = () => {
     }
   }
 
+  const handleShareNumber = async () => {
+    if (!currentTailor) return
+    const phone = currentTailor.phone || 'N/A'
+    const newMessage = {
+      id: Date.now(),
+      from: 'tailor',
+      text: `My contact number is: ${phone}. Feel free to call me!`,
+      createdAt: new Date().toISOString()
+    }
+    await sendToFirestore([...messages, newMessage])
+  }
+
+  const handleAcceptWork = async () => {
+    if (!customerId || !currentTailor) return
+
+    // Create an order in 'orders' collection
+    const tailorId = currentTailor.phone || currentTailor.id
+    const orderId = `order_${Date.now()}`
+
+    const orderData = {
+      orderId,
+      customerId,
+      customerName,
+      tailorId,
+      tailorName: currentTailor.name || currentTailor.fullName || 'Tailor',
+      status: 'working',
+      startTime: new Date().toISOString(),
+      lastUpdate: new Date().toISOString(),
+      workType: localStorage.getItem('workType') || 'light'
+    }
+
+    try {
+      await setDoc(doc(db, 'orders', orderId), orderData)
+
+      const acceptMessage = {
+        id: Date.now(),
+        from: 'system',
+        text: `Work started! ${currentTailor.name} has accepted your request. Tracking ID: ${orderId}`,
+        orderId,
+        createdAt: new Date().toISOString()
+      }
+
+      await sendToFirestore([...messages, acceptMessage], 'accepted')
+      alert('Work started! Timer is now running.')
+      navigate(`/tailor/orders`) // Navigate to orders management
+    } catch (err) {
+      console.error('Error accepting work:', err)
+      alert('Failed to start work. Please try again.')
+    }
+  }
+
   // Show conversation view
   return (
     <TailorLayout>
@@ -246,13 +314,20 @@ const TailorEnquiries = () => {
               />
             </div>
           </div>
-          <PrimaryButton
-            onClick={handleAddCustomPricing}
-            className="mt-3"
-            disabled={!customPricing.service || !customPricing.price}
-          >
-            Add Pricing
-          </PrimaryButton>
+          <div className="flex gap-2">
+            <PrimaryButton
+              onClick={handleAcceptWork}
+              className="mt-3 flex-1 bg-green-600 hover:bg-green-700"
+            >
+              Accept Work & Start Timer
+            </PrimaryButton>
+            <button
+              onClick={handleShareNumber}
+              className="mt-3 flex-1 btn-outline border-blue-200 text-blue-600 hover:bg-blue-50"
+            >
+              Share My Number
+            </button>
+          </div>
         </Card>
 
         <Card className="p-4">
@@ -269,8 +344,8 @@ const TailorEnquiries = () => {
                 <div
                   key={m.id}
                   className={`max-w-[80%] mb-2 px-3 py-2 rounded-lg text-sm ${m.from === 'tailor'
-                      ? 'ml-auto bg-[color:var(--color-primary)] text-white'
-                      : 'bg-white border border-neutral-200'
+                    ? 'ml-auto bg-[color:var(--color-primary)] text-white'
+                    : 'bg-white border border-neutral-200'
                     } ${m.type === 'rejection' ? 'bg-red-100 border-red-300 text-red-800' : ''}`}
                 >
                   {m.type === 'pricing' && m.pricing ? (

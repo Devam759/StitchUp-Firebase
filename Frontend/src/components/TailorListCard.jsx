@@ -17,27 +17,44 @@ const TailorListCard = ({ tailor, onHover, onLeave, isQuickFix = false }) => {
     distanceKm = 0,
     rating = 0,
     reviews = 0,
-    priceFrom = 0
+    priceFrom = 0,
+    heavyTasks = 0,
+    lightTasks = 0
   } = tailor
+
+  // ETA Formula: (heavy task * 3 days) + (Light task * 4 hours)
+  const calculateETA = () => {
+    const heavyTime = heavyTasks * 72 // 72 hours per heavy task
+    const lightTime = lightTasks * 4 // 4 hours per light task
+    const totalHours = heavyTime + lightTime
+
+    if (totalHours === 0) return 'Ready Now'
+    if (totalHours < 24) return `${totalHours} hours`
+    const days = Math.floor(totalHours / 24)
+    const extraHours = totalHours % 24
+    return extraHours > 0 ? `${days}d ${extraHours}h` : `${days} days`
+  }
+
+  const eta = calculateETA()
 
   const [addedToCart, setAddedToCart] = useState(false)
 
   const handleAddToCart = (e) => {
     e.stopPropagation()
-    
+
     try {
       const cart = JSON.parse(localStorage.getItem('cart') || '[]')
-      
+
       // Check if item already exists in cart
       const existingItem = cart.find(item => item.tailorId === id)
-      
+
       if (existingItem) {
         // Item already in cart, maybe show a message
         setAddedToCart(true)
         setTimeout(() => setAddedToCart(false), 2000)
         return
       }
-      
+
       // Add new item to cart
       const cartItem = {
         tailorId: id,
@@ -48,13 +65,13 @@ const TailorListCard = ({ tailor, onHover, onLeave, isQuickFix = false }) => {
         rating: rating,
         addedAt: new Date().toISOString()
       }
-      
+
       cart.push(cartItem)
       localStorage.setItem('cart', JSON.stringify(cart))
-      
+
       // Dispatch event to notify other components (like navbar cart count)
       window.dispatchEvent(new Event('cartUpdate'))
-      
+
       setAddedToCart(true)
       setTimeout(() => setAddedToCart(false), 2000)
     } catch (error) {
@@ -109,8 +126,12 @@ const TailorListCard = ({ tailor, onHover, onLeave, isQuickFix = false }) => {
             <span className="font-medium">₹{priceFrom}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-neutral-600">Current Customers</span>
-            <span className="font-medium">{currentOrders}</span>
+            <span className="text-neutral-600">Waiting List</span>
+            <span className="font-medium">{currentOrders} tasks</span>
+          </div>
+          <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg border border-blue-100">
+            <span className="text-blue-800 text-xs font-bold uppercase">Estimated Wait</span>
+            <span className="font-bold text-blue-900">{eta}</span>
           </div>
         </div>
 
@@ -120,14 +141,14 @@ const TailorListCard = ({ tailor, onHover, onLeave, isQuickFix = false }) => {
             {isAvailable ? 'Online' : 'Offline'}
           </div>
           {isQuickFix ? (
-            <button 
+            <button
               onClick={handleEnquireNow}
               className="btn-primary flex-1"
             >
               Enquire Now
             </button>
           ) : (
-            <button 
+            <button
               onClick={handleAddToCart}
               disabled={addedToCart}
               className={`btn-primary flex-1 ${addedToCart ? 'opacity-75 cursor-not-allowed' : ''}`}

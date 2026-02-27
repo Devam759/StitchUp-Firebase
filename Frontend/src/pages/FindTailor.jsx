@@ -40,6 +40,8 @@ const FindTailor = () => {
             shopPhotoUrl: data.shopPhotoUrl || '',
             isAvailable: typeof data.isAvailable === 'boolean' ? data.isAvailable : true,
             currentOrders: data.currentOrders || 0,
+            heavyTasks: data.heavyTasks || 0,
+            lightTasks: data.lightTasks || 0,
             distanceKm: data.distanceKm || 0,
             rating: data.rating || 4.5,
             reviews: data.reviews || 0,

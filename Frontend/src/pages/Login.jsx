@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import Input from '../components/ui/Input'
@@ -19,6 +19,15 @@ const Login = () => {
   const [confirmationResult, setConfirmationResult] = useState(null)
   const [otpLoading, setOtpLoading] = useState(false)
 
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear() } catch (e) { }
+        window.recaptchaVerifier = null
+      }
+    }
+  }, [])
+
   const handleGetOtp = async (e) => {
     if (e) e.preventDefault()
     const next = {}
@@ -29,18 +38,27 @@ const Login = () => {
     setOtpLoading(true)
     try {
       const formattedPhone = '+91' + phone.replace(/\D/g, '')
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' })
+
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear() } catch (e) { }
+        window.recaptchaVerifier = null
       }
+
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible'
+      })
+
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier)
       setConfirmationResult(confirmation)
       setOtpOpen(true)
+      setErrors({})
     } catch (error) {
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear() } catch { }
-        window.recaptchaVerifier = null
+      console.error('Phone auth error:', error)
+      let msg = error.message
+      if (error.code === 'auth/invalid-app-credential') {
+        msg = 'App verification failed. Please ensure your domain (localhost/hosting URL) is added to "Authorized Domains" in Firebase Console > Authentication > Settings.'
       }
-      setErrors({ form: `Failed to send OTP: ${error.message}` })
+      setErrors({ form: `Failed to send OTP: ${msg}` })
     }
     setOtpLoading(false)
   }
@@ -81,7 +99,6 @@ const Login = () => {
       <Navbar />
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
-          {/* Header */}
           <div className="text-center mb-8">
             <Link to="/">
               <img src="/logo2.png" alt="StitchUp" className="h-10 mx-auto mb-6" />
@@ -90,7 +107,6 @@ const Login = () => {
             <p className="mt-2 text-neutral-500 text-sm">Enter your phone number to continue</p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleGetOtp} className="bg-white rounded-xl border border-neutral-200 p-6 shadow-sm">
             <div className="space-y-4">
               <div>
@@ -119,7 +135,6 @@ const Login = () => {
             <div id="recaptcha-container"></div>
           </form>
 
-          {/* Footer link */}
           <p className="text-center mt-6 text-sm text-neutral-500">
             Don't have an account?{' '}
             <Link to="/signup" className="text-[color:var(--color-primary)] font-medium hover:underline">Create one</Link>

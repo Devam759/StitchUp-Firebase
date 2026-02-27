@@ -38,6 +38,20 @@ const Enquiries = () => {
     }
   }
 
+  const [tailorBusy, setTailorBusy] = useState(false)
+
+  // Listen for tailor and active conversation status
+  useEffect(() => {
+    if (!tailorId) return
+    const unsub = onSnapshot(doc(db, 'users', tailorId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data()
+        setTailorBusy(data.isCurrentlyChatting || false)
+      }
+    })
+    return () => unsub()
+  }, [tailorId])
+
   // Load specific enquiry
   useEffect(() => {
     if (!tailorId) return
@@ -284,7 +298,13 @@ const Enquiries = () => {
                   <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     Online
                   </span>
-                  <span className="text-sm text-neutral-600">Tailor is available for instant chat</span>
+                  {tailorBusy ? (
+                    <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-full animate-pulse">
+                      Tailor is currently talking to someone else
+                    </span>
+                  ) : (
+                    <span className="text-sm text-neutral-600">Tailor is available for instant chat</span>
+                  )}
                 </>
               ) : (
                 <>
@@ -384,9 +404,9 @@ const Enquiries = () => {
             </div>
           </div>
         </div>
-      </main>
+      </main >
       <Footer />
-    </div>
+    </div >
   )
 }
 
