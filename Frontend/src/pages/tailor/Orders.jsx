@@ -4,7 +4,8 @@ import Card from '../../components/ui/Card'
 import PrimaryButton from '../../components/ui/PrimaryButton'
 import { FiX, FiCamera, FiUpload, FiImage } from 'react-icons/fi'
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, storage } from '../../firebase'
 
 const sample = [
   { id: 'ST-2001', user: 'Aarav', service: 'Alter', cloth: 'Pant', slot: '11:00-12:00', status: 'Accepted' },
@@ -37,6 +38,7 @@ const Orders = () => {
   const fileInputRef = useRef(null)
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
+  const [savingAction, setSavingAction] = useState(false)
 
   const openPhotoModal = (order) => {
     setSelectedOrder(order)
@@ -159,25 +161,33 @@ const Orders = () => {
     }
 
     if (selectedOrder) {
+      setSavingAction(true)
       try {
+        const uploadPromises = photos.map(async (photo, i) => {
+          const storageRef = ref(storage, `orders/${selectedOrder.id}/${Date.now()}_${i}`)
+          await uploadBytes(storageRef, photo.file)
+          return await getDownloadURL(storageRef)
+        })
+        const uploadedUrls = await Promise.all(uploadPromises)
+
         const orderRef = doc(db, 'orders', selectedOrder.id)
         await updateDoc(orderRef, {
           status: 'Ready',
-          photos: photos.map(p => p.preview),
+          photos: uploadedUrls,
           readyAt: new Date().toISOString(),
           needsRevision: false,
           satisfactionStatus: null
         })
 
-        // Simulating the redirect for "Final Conversation" call
-        alert('Work ended! Redirecting to customer for final conversation...')
-        window.location.href = `tel:${selectedOrder.customerPhone || ''}`
-
+        alert('Work ended! Order marked as ready.')
+        closePhotoModal()
       } catch (error) {
         console.error('Error saving order to Firestore:', error)
+        alert('Failed to save order: ' + error.message)
+      } finally {
+        setSavingAction(false)
       }
     }
-    closePhotoModal()
   }
 
   return (
@@ -378,9 +388,9 @@ const Orders = () => {
               <PrimaryButton
                 onClick={handleMarkReady}
                 className="flex-1"
-                disabled={photos.length === 0}
+                disabled={photos.length === 0 || savingAction}
               >
-                Mark as Ready ({photos.length} {photos.length === 1 ? 'photo' : 'photos'})
+                {savingAction ? 'Uploading & Saving...' : `Mark as Ready (${photos.length} ${photos.length === 1 ? 'photo' : 'photos'})`}
               </PrimaryButton>
             </div>
           </Card>

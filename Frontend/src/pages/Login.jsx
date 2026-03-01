@@ -6,8 +6,8 @@ import PrimaryButton from '../components/ui/PrimaryButton'
 import OTPModal from '../components/OTPModal'
 import Toast from '../components/Toast'
 import { Link, useNavigate } from 'react-router-dom'
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth'
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
 const Login = () => {
@@ -68,16 +68,40 @@ const Login = () => {
     try {
       if (!confirmationResult) { setErrors({ form: 'Session expired. Please try again.' }); setOtpOpen(false); return }
       const res = await confirmationResult.confirm(otpString)
-      const userRef = doc(db, 'users', res.user.uid)
-      const userSnap = await getDoc(userRef)
+      const cleanPhone = phone.replace(/\D/g, '')
       let targetUser = null
+      let existingDocId = null
 
-      if (userSnap.exists()) {
-        targetUser = { id: userSnap.id, uid: res.user.uid, ...userSnap.data() }
+      // Find user by phone number
+      const usersRef = collection(db, 'users')
+      const q = query(usersRef, where('phone', '==', cleanPhone))
+      const querySnapshot = await getDocs(q)
+
+      if (!querySnapshot.empty) {
+        // User found by phone number
+        const userDoc = querySnapshot.docs[0]
+        existingDocId = userDoc.id
+        targetUser = { id: existingDocId, uid: res.user.uid, ...userDoc.data() }
+
+        // Update the document to ensure the UID is set correctly
+        await setDoc(doc(db, 'users', existingDocId), { uid: res.user.uid }, { merge: true })
       } else {
-        targetUser = { phone: phone.replace(/\D/g, ''), role: 'customer', fullName: 'New User', createdAt: new Date().toISOString() }
-        await setDoc(userRef, targetUser)
-        targetUser = { id: res.user.uid, uid: res.user.uid, ...targetUser }
+        // Not found by phone, try to find by uid just in case phone field was missing
+        const userRef = doc(db, 'users', res.user.uid)
+        const userSnap = await getDoc(userRef)
+
+        if (userSnap.exists()) {
+          targetUser = { id: userSnap.id, uid: res.user.uid, ...userSnap.data() }
+          // Fix phone back into the record
+          await setDoc(userRef, { phone: cleanPhone }, { merge: true })
+        } else {
+          // Completely new user! They shouldn't be logging in.
+          await signOut(auth)
+          setOtpOpen(false)
+          setErrors({ form: 'No account found for this number. Please sign up first.' })
+          setTimeout(() => navigate('/signup'), 2000)
+          return
+        }
       }
 
       localStorage.setItem('currentUser', JSON.stringify(targetUser))

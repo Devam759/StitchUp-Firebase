@@ -39,7 +39,7 @@ const TailorEnquiries = () => {
   useEffect(() => {
     if (customerId) return // Detail view handles its own listener
 
-    const tailorId = currentTailor?.phone || currentTailor?.id
+    const tailorId = currentTailor?.id || currentTailor?.phone
     if (!tailorId) return
 
     const unsub = onSnapshot(query(collection(db, 'enquiries'), where('tailorId', '==', tailorId)), (snapshot) => {
@@ -55,7 +55,7 @@ const TailorEnquiries = () => {
   // Load messages for specific customer conversation
   useEffect(() => {
     if (!customerId || !currentTailor) return
-    const tailorId = currentTailor.phone || currentTailor.id
+    const tailorId = currentTailor.id || currentTailor.phone
     const docId = `${customerId}_${tailorId}`
 
     const unsub = onSnapshot(doc(db, 'enquiries', docId), (docSnap) => {
@@ -74,7 +74,7 @@ const TailorEnquiries = () => {
   // Track busy status
   useEffect(() => {
     if (!currentTailor || !customerId) return
-    const tailorId = currentTailor.phone || currentTailor.id
+    const tailorId = currentTailor.id || currentTailor.phone
 
     const setBusy = async (val) => {
       try {
@@ -93,7 +93,7 @@ const TailorEnquiries = () => {
   }, [messages])
 
   const sendToFirestore = async (newMessagesArray, statusUpdate = null) => {
-    const tailorId = currentTailor?.phone || currentTailor?.id
+    const tailorId = currentTailor?.id || currentTailor?.phone
     const tailorName = currentTailor?.name || currentTailor?.fullName || 'Tailor'
     const docId = `${customerId}_${tailorId}`
 
@@ -243,7 +243,7 @@ const TailorEnquiries = () => {
     if (!customerId || !currentTailor) return
 
     // Create an order in 'orders' collection
-    const tailorId = currentTailor.phone || currentTailor.id
+    const tailorId = currentTailor.id || currentTailor.phone
     const orderId = `order_${Date.now()}`
 
     const orderData = {

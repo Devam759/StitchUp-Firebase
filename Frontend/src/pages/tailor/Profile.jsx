@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import TailorLayout from '../../layouts/TailorLayout'
 import Card from '../../components/ui/Card'
 import PrimaryButton from '../../components/ui/PrimaryButton'
@@ -33,9 +33,9 @@ const Profile = () => {
   const [selectedCategory, setSelectedCategory] = useState('Shirt')
 
   useEffect(() => {
-    if (!user?.uid) return
+    if (!user?.id) return
     const loadProfile = async () => {
-      const snap = await getDoc(doc(db, 'users', user.uid))
+      const snap = await getDoc(doc(db, 'users', user.id))
       if (snap.exists()) {
         const d = snap.data()
         if (d.skills) setSkills(d.skills)
@@ -50,16 +50,16 @@ const Profile = () => {
 
   const handleBannerUpload = async (e) => {
     const file = e.target.files[0]
-    if (!file || !user?.uid) return
+    if (!file || !user?.id) return
 
     setUploadingBanner(true)
     try {
-      const storageRef = ref(storage, `banners/${user.uid}`)
+      const storageRef = ref(storage, `banners/${user.id}`)
       await uploadBytes(storageRef, file)
       const url = await getDownloadURL(storageRef)
       setBannerUrl(url)
       // Instant update in DB
-      await updateDoc(doc(db, 'users', user.uid), { bannerUrl: url })
+      await updateDoc(doc(db, 'users', user.id), { bannerUrl: url })
       setToast({ type: 'success', message: 'Banner updated!' })
       setTimeout(() => setToast(false), 3000)
     } catch (err) {
@@ -70,14 +70,14 @@ const Profile = () => {
   }
 
   const handleSave = async () => {
-    if (!user?.uid) return
+    if (!user?.id) return
     setSaving(true)
 
     const numericPrices = Object.values(pricing).map(p => Number(p)).filter(p => p > 0)
     const minPrice = numericPrices.length > 0 ? Math.min(...numericPrices) : 0
 
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateDoc(doc(db, 'users', user.id), {
         skills,
         pricing,
         priceFrom: minPrice,

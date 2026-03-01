@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut as firebaseSignOut, setPersistence, browserLocalPersistence } from 'firebase/auth'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
 const AuthContext = createContext(null)
@@ -21,6 +21,20 @@ export const AuthProvider = ({ children }) => {
     const [firebaseUser, setFirebaseUser] = useState(null)
     const [loading, setLoading] = useState(true)
 
+    const findUserDoc = async (uid, phone) => {
+        let userDoc = await getDoc(doc(db, 'users', uid))
+        if (!userDoc.exists() && phone) {
+            // Find by phone number
+            const cleanPhone = phone.replace(/\D/g, '')
+            const q = query(collection(db, 'users'), where('phone', '==', cleanPhone))
+            const qs = await getDocs(q)
+            if (!qs.empty) {
+                userDoc = qs.docs[0]
+            }
+        }
+        return userDoc
+    }
+
     useEffect(() => {
         // Ensure local persistence is set
         setPersistence(auth, browserLocalPersistence)
@@ -29,24 +43,24 @@ export const AuthProvider = ({ children }) => {
             setFirebaseUser(fbUser)
 
             if (fbUser) {
-                // Try to load user profile from Firestore
                 try {
-                    const userDoc = await getDoc(doc(db, 'users', fbUser.uid))
-                    if (userDoc.exists()) {
+                    const userDoc = await findUserDoc(fbUser.uid, fbUser.phoneNumber)
+                    const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists
+
+                    if (docExists) {
                         const data = userDoc.data()
-                        const merged = { id: fbUser.uid, uid: fbUser.uid, phone: fbUser.phoneNumber, ...data }
+                        const merged = { id: userDoc.id, uid: fbUser.uid, phone: fbUser.phoneNumber, ...data }
                         setUser(merged)
-                        // Persist in localStorage and Cookie as requested
                         localStorage.setItem('currentUser', JSON.stringify(merged))
                         document.cookie = `st_user=${fbUser.uid}; max-age=31536000; path=/; SameSite=Lax`
                         window.dispatchEvent(new Event('authChange'))
                     } else {
-                        // Auth user exists but no Firestore profile yet (mid-signup)
-                        setUser({ id: fbUser.uid, uid: fbUser.uid, phone: fbUser.phoneNumber, role: 'customer' })
+                        // Auth user exists but no Firestore profile yet (mid-signup, or deleted account)
+                        setUser({ id: fbUser.uid, uid: fbUser.uid, phone: fbUser.phoneNumber, isNew: true })
                     }
                 } catch (err) {
                     console.error('Error loading user profile:', err)
-                    setUser({ id: fbUser.uid, uid: fbUser.uid, phone: fbUser.phoneNumber, role: 'customer' })
+                    setUser({ id: fbUser.uid, uid: fbUser.uid, phone: fbUser.phoneNumber, isNew: true })
                 }
             } else {
                 setUser(null)
@@ -62,10 +76,11 @@ export const AuthProvider = ({ children }) => {
     const refreshUser = async () => {
         if (!firebaseUser) return
         try {
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-            if (userDoc.exists()) {
+            const userDoc = await findUserDoc(firebaseUser.uid, firebaseUser.phoneNumber)
+            const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists
+            if (docExists) {
                 const data = userDoc.data()
-                const merged = { id: firebaseUser.uid, uid: firebaseUser.uid, phone: firebaseUser.phoneNumber, ...data }
+                const merged = { id: userDoc.id, uid: firebaseUser.uid, phone: firebaseUser.phoneNumber, ...data }
                 setUser(merged)
                 localStorage.setItem('currentUser', JSON.stringify(merged))
                 window.dispatchEvent(new Event('authChange'))
@@ -78,9 +93,10 @@ export const AuthProvider = ({ children }) => {
     }
 
     const updateProfile = async (updates) => {
-        if (!firebaseUser) return
+        if (!user || !user.id) return false
         try {
-            await updateDoc(doc(db, 'users', firebaseUser.uid), updates)
+            // Must use user.id, because the actual document ID may differ from firebase auth UID
+            await updateDoc(doc(db, 'users', user.id), updates)
             const updatedUser = { ...user, ...updates }
             setUser(updatedUser)
             localStorage.setItem('currentUser', JSON.stringify(updatedUser))
